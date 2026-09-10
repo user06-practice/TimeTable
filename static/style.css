@@ -1,0 +1,276 @@
+* {
+    box-sizing: border-box;
+}
+
+:root {
+    --time-column-width: 80px;
+    --train-lane-width: 140px;
+}
+
+body {
+    margin: 16px;
+    font-family: sans-serif;
+}
+
+
+/* ダイヤグラム全体のスクロール領域 */
+.diagram-scroll {
+    width: 100%;
+    max-height: 80vh;
+
+    overflow: auto;
+
+    border: 1px solid #ccc;
+}
+
+
+/* 上部の列車ヘッダー */
+.diagram-header {
+    display: flex;
+    width: max-content;
+
+    position: sticky;
+    top: 0;
+    z-index: 20;
+
+    background: white;
+
+    border-bottom: 1px solid #ccc;
+}
+
+
+/* 左上の「時刻」 */
+.time-header {
+    width: var(--time-column-width);
+    flex: 0 0 var(--time-column-width);
+
+    padding: 10px 4px;
+
+    text-align: center;
+
+    position: sticky;
+    left: 0;
+    z-index: 30;
+
+    background: white;
+
+    border-right: 1px solid #ccc;
+}
+
+
+/* 各列車のヘッダー */
+.lane-header {
+    width: var(--train-lane-width);
+    flex: 0 0 var(--train-lane-width);
+
+    padding: 8px 4px;
+
+    text-align: center;
+
+    border-right: 1px solid #ddd;
+}
+
+.train-number {
+    font-size: 12px;
+}
+
+
+/* ダイヤグラム本体 */
+.diagram-body {
+    display: flex;
+    position: relative;
+    width: max-content;
+}
+
+
+/* 左側の時刻列 */
+.time-column {
+    position: sticky;
+    left: 0;
+    z-index: 10;
+
+    width: var(--time-column-width);
+    flex: 0 0 var(--time-column-width);
+
+    background: white;
+
+    border-right: 1px solid #aaa;
+}
+
+
+/* 5分刻みの時刻 */
+.time-tick {
+    position: absolute;
+
+    left: 0;
+    width: 100%;
+
+    text-align: center;
+
+    font-size: 12px;
+
+    transform: translateY(-50%);
+}
+
+
+/* 希望到着時刻 */
+.target-time {
+    position: absolute;
+
+    left: 50%;
+
+    padding: 3px 5px;
+
+    font-size: 12px;
+    font-weight: bold;
+
+    color: #b22222;
+    background: white;
+
+    border: 2px solid #b22222;
+    border-radius: 5px;
+
+    white-space: nowrap;
+
+    z-index: 15;
+
+    transform: translate(-50%, -50%);
+}
+
+
+/* 希望時刻の横線 */
+.target-line {
+    position: absolute;
+
+    left: var(--time-column-width);
+    right: 0;
+
+    border-top: 2px dashed #d46a6a;
+
+    z-index: 1;
+
+    pointer-events: none;
+
+    transform: translateY(-50%);
+}
+
+
+/* 各列車レーン */
+.train-lane {
+    position: relative;
+
+    width: var(--train-lane-width);
+    flex: 0 0 var(--train-lane-width);
+
+    border-right: 1px solid #eee;
+}
+
+
+/* 列車を表す縦線 */
+.train-line {
+    position: absolute;
+
+    left: 50%;
+
+    width: 2px;
+
+    background: #777;
+
+    z-index: 2;
+
+    transform: translateX(-50%);
+}
+
+
+/* 各駅の表示位置 */
+.stop {
+    position: absolute;
+
+    left: 50%;
+
+    width: calc(var(--train-lane-width) - 12px);
+
+    text-align: center;
+
+    z-index: 3;
+
+    transform: translate(-50%, -50%);
+}
+
+
+/* 駅名 + 時刻 */
+.stop-info {
+    display: flex;
+
+    justify-content: center;
+    align-items: center;
+
+    gap: 4px;
+
+    padding: 1px 3px;
+
+    background: white;
+
+    white-space: nowrap;
+}
+
+
+/* 駅名 */
+.station-name {
+    font-size: 11px;
+    font-weight: bold;
+}
+
+
+/* 駅時刻 */
+.station-time {
+    font-size: 10px;
+}
+
+/* =========================
+   新ダイヤグラム
+   ========================= */
+
+.new-diagram-scroll {
+    width: 100%;
+    overflow-x: auto;
+    border: 1px solid #ccc;
+    background: white;
+}
+
+.new-diagram {
+    display: block;
+}
+
+.diagram-time-grid {
+    stroke: #ddd;
+    stroke-width: 1;
+    stroke-dasharray: 4 4;
+}
+
+.diagram-time-label {
+    font-size: 11px;
+    fill: #555;
+}
+
+.diagram-station-line {
+    stroke: #aaa;
+    stroke-width: 1;
+}
+
+.diagram-station-name {
+    font-size: 12px;
+    font-weight: bold;
+    fill: #222;
+}
+
+.diagram-train-line {
+    fill: none;
+    stroke: #555;
+    stroke-width: 2;
+}
+
+.diagram-stop-time {
+    font-size: 10px;
+    fill: #222;
+}

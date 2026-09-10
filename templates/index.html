@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>TimeTable</title>
+    <link
+    rel="stylesheet"
+    href="{{ url_for('static', filename='style.css') }}"
+        >
+</head>
+
+<body>
+
+    <h1>TimeTable</h1>
+
+    <form method="POST">
+
+        <div>
+            <label>
+                <input
+                    type="radio"
+                    name="direction"
+                    value="outbound"
+                    {% if direction == "outbound" %}checked{% endif %}
+                >
+                行き
+            </label>
+
+            <label>
+                <input
+                    type="radio"
+                    name="direction"
+                    value="return"
+                    {% if direction == "return" %}checked{% endif %}
+                >
+                帰り
+            </label>
+        </div>
+
+        <br>
+
+        <div>
+            <label for="target_time">
+                指定時刻
+            </label>
+
+            <input
+                type="time"
+                id="target_time"
+                name="target_time"
+                value="{{ target_time }}"
+                required
+            >
+        </div>
+
+        <br>
+
+        <button type="submit">
+            表示
+        </button>
+
+    </form>
+
+
+    {% if selected_trains %}
+
+    <hr>
+
+    {% if direction == "outbound" %}
+
+        <h2>
+            希望到着 {{ target_time }}
+        </h2>
+
+        <div class="diagram-scroll">
+
+            <!-- 列車名 -->
+            <div class="diagram-header">
+
+                <div class="time-header">
+                    時刻
+                </div>
+
+                {% for lane in train_lanes %}
+
+                    <div class="lane-header">
+                        <div class="train-number">
+                            {{ loop.index }}
+                        </div>
+
+                        <strong>
+                            {{ lane.train_type }}
+                        </strong>
+                    </div>
+
+                {% endfor %}
+
+            </div>
+
+
+            <!-- 時間軸・列車 -->
+            <div
+                class="diagram-body"
+                style="height: {{ timeline_height }}px;"
+            >
+
+                <!-- 左側の時間軸 -->
+                <div class="time-column">
+
+                    {% for tick in time_ticks %}
+
+    <div
+        class="time-tick"
+        style="
+            top:
+            {{ ((tick.minutes - start_minutes)
+               * pixels_per_minute) + diagram_offset }}px;
+        "
+    >
+        {{ tick.label }}
+    </div>
+
+{% endfor %}
+
+
+                    <!-- 希望到着時刻 -->
+                    <div
+    class="target-time"
+    style="top: {{ target_top + diagram_offset }}px;"
+>
+    希望 {{ target_time }}
+</div>
+
+                </div>
+
+                <div
+    class="target-line"
+    style="top: {{ target_top + diagram_offset }}px;"
+></div>
+
+
+                <!-- 列車レーン -->
+                {% for lane in train_lanes %}
+
+                    <div class="train-lane">
+
+                        <!-- 列車を表す縦線 -->
+                        <div
+    class="train-line"
+    style="
+        top: {{ lane.line_top + diagram_offset }}px;
+        height: {{ lane.line_height }}px;
+    "
+></div>
+
+
+                        {% for stop in lane.stops %}
+
+                            <div
+    class="stop"
+    style="top: {{ stop.top + diagram_offset }}px;"
+>
+
+
+                                <div class="stop-info">
+
+    <span class="station-name">
+        {{ stop.station }}
+    </span>
+
+    <span class="station-time">
+
+        {% if stop.arrival and stop.departure %}
+
+            {{ stop.arrival }}→{{ stop.departure }}
+
+        {% elif stop.departure %}
+
+            {{ stop.departure }}
+
+        {% elif stop.arrival %}
+
+            {{ stop.arrival }}
+
+        {% endif %}
+
+    </span>
+
+</div>
+
+                            </div>
+
+                        {% endfor %}
+
+                    </div>
+
+                {% endfor %}
+
+            </div>
+
+        </div>
+
+
+    {% else %}
+
+        <h2>
+            帰り：出発希望 {{ target_time }}
+        </h2>
+
+        {% for train in selected_trains %}
+
+            <p>
+                <strong>
+                    {{ loop.index }}.
+                    {{ train["train_type"] }}
+                </strong>
+
+                神戸：
+                {{ train.get("神戸発") or "-" }}
+
+                ／ 大阪：
+                {{ train.get("大阪発") or "-" }}
+
+                ／ 茨木：
+                {{ train.get("茨木発") or "-" }}
+            </p>
+
+        {% endfor %}
+
+    {% endif %}
+
+{% endif %}
+
+</body>
+
+</html>
