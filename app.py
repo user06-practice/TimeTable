@@ -7,15 +7,21 @@ from timetable_service import (
     sort_outbound_trains_for_display,
     calculate_timeline_range,
     generate_time_ticks,
-    build_train_lane,
-    calculate_top,
+    calculate_x_position,
     is_valid_search_time,
     build_train_diagram_points,
+    build_train_diagram_stops,
+    stack_overlapping_stops,
 )
 
 
 app = Flask(__name__)
 
+
+# =========================================================
+# 行きダイヤで表示する駅
+# 快速停車駅を中心に表示
+# =========================================================
 OUTBOUND_STATIONS = [
     {
         "name": "茨木",
@@ -78,186 +84,329 @@ OUTBOUND_STATIONS = [
 @app.route("/", methods=["GET", "POST"])
 def index():
 
+    # =====================================================
+    # 画面共通
+    # =====================================================
+    direction = "outbound"
+    target_time = ""
+
+    selected_trains = []
+    error_message = None
+
+
+    # =====================================================
+    # 新ダイヤグラム用
+    # =====================================================
     diagram_trains = []
 
     diagram_start_minutes = None
     diagram_end_minutes = None
 
-    diagram_pixels_per_minute = 10
+    # 基本倍率での1分あたりの横幅
+    diagram_pixels_per_minute = 18
+
+    # 一番上の駅までの余白
     diagram_top_margin = 50
-    diagram_station_spacing = 90
+
+    # 駅と駅の縦方向の間隔
+    diagram_station_spacing = 78
 
     diagram_width = 0
     diagram_height = 0
 
-    selected_trains = []
-    train_lanes = []
+    # 希望到着時刻の縦線位置
+    diagram_target_x = None
+
+    # 5分刻みの時間軸
     time_ticks = []
 
-    direction = "outbound"
-    target_time = ""
 
-    start_minutes = None
-    end_minutes = None
-    target_top = None
-    error_message = None
-
-    timeline_height = 0
-
-    pixels_per_minute = 14
-    diagram_offset = 24
-
-    # 検索ボタンが押されたときだけ処理する
+    # =====================================================
+    # POSTされたときだけ検索
+    # =====================================================
     if request.method == "POST":
-        direction = request.form["direction"]
-        target_time = request.form["target_time"]
 
-        # -------------------------
+        # [] ではなく get() を使うことで、
+        # 万が一フォーム値が送られてこなくても
+        # BadRequestKeyError にしない
+        direction = request.form.get(
+            "direction",
+            "outbound"
+        )
+
+        target_time = request.form.get(
+            "target_time",
+            ""
+        )
+
+
+        # =================================================
         # 行き
-        # -------------------------
+        # =================================================
         if direction == "outbound":
-            trains = load_trains("to-kobe.csv")
 
-            # 検索可能時間か確認
+            trains = load_trains(
+                "to-kobe.csv"
+            )
+
+
+            # ---------------------------------------------
+            # 検索時刻の範囲チェック
+            # ---------------------------------------------
             if not is_valid_search_time(
                 direction="outbound",
                 target_time=target_time,
                 trains=trains,
             ):
+
                 error_message = (
                     "行きの希望到着時刻は、"
                     "始発から9:30までを指定してください。"
                 )
 
+
             else:
-                selected_trains = select_outbound_trains(
-                    trains,
-                    target_time
-                )
 
-                # 神戸時刻の早い順に並べる
-                selected_trains = sort_outbound_trains_for_display(
-                    selected_trains
-                )
-
-                # 新しいダイヤグラム用の時間範囲
-                diagram_start_minutes, diagram_end_minutes = calculate_timeline_range(
-                    selected_trains
-                )
-
-                # 列車10本をSVG用の座標データに変換
-                for train in selected_trains:
-                    points = build_train_diagram_points(
-                        train=train,
-                        stations=OUTBOUND_STATIONS,
-                        start_minutes=diagram_start_minutes,
-                        pixels_per_minute=diagram_pixels_per_minute,
-                        top_margin=diagram_top_margin,
-                        station_spacing=diagram_station_spacing,
+                # -----------------------------------------
+                # 希望到着時刻の
+                # 前7本 + 後3本を取得
+                # -----------------------------------------
+                selected_trains = (
+                    select_outbound_trains(
+                        trains,
+                        target_time
                     )
+                )
+
+
+                # -----------------------------------------
+                # 神戸時刻の早い順に並べる
+                # -----------------------------------------
+                selected_trains = (
+                    sort_outbound_trains_for_display(
+                        selected_trains
+                    )
+                )
+
+
+                # -----------------------------------------
+                # ダイヤ全体の時間範囲
+                # -----------------------------------------
+                (
+                    diagram_start_minutes,
+                    diagram_end_minutes
+                ) = calculate_timeline_range(
+                    selected_trains
+                )
+
+
+                # -----------------------------------------
+                # 5分刻みの時間軸
+                # -----------------------------------------
+                time_ticks = generate_time_ticks(
+                    diagram_start_minutes,
+                    diagram_end_minutes
+                )
+
+
+                # -----------------------------------------
+                # 希望到着時刻の縦線位置
+                # -----------------------------------------
+                diagram_target_x = (
+                    calculate_x_position(
+                        time_text=target_time,
+                        start_minutes=diagram_start_minutes,
+                        pixels_per_minute=(
+                            diagram_pixels_per_minute
+                        ),
+                    )
+                )
+
+
+                # -----------------------------------------
+                # 10本分のSVG描画データを作る
+                # -----------------------------------------
+                for train in selected_trains:
+
+                    # 列車の折れ線を描くための点
+                    points = (
+                        build_train_diagram_points(
+                            train=train,
+                            stations=OUTBOUND_STATIONS,
+                            start_minutes=(
+                                diagram_start_minutes
+                            ),
+                            pixels_per_minute=(
+                                diagram_pixels_per_minute
+                            ),
+                            top_margin=(
+                                diagram_top_margin
+                            ),
+                            station_spacing=(
+                                diagram_station_spacing
+                            ),
+                        )
+                    )
+
+
+                    # 各駅の情報ボックス用
+                    #
+                    # 例：
+                    # 着 8:22
+                    #   大阪
+                    #   発 8:25
+                    stops = (
+                        build_train_diagram_stops(
+                            train=train,
+                            stations=OUTBOUND_STATIONS,
+                            start_minutes=(
+                                diagram_start_minutes
+                            ),
+                            pixels_per_minute=(
+                                diagram_pixels_per_minute
+                            ),
+                            top_margin=(
+                                diagram_top_margin
+                            ),
+                            station_spacing=(
+                                diagram_station_spacing
+                            ),
+                        )
+                    )
+
 
                     diagram_trains.append({
-                        "train_type": train["train_type"],
-                        "kobe_time": train["神戸発"],
+                        "train_type": (
+                            train["train_type"]
+                        ),
+                        "kobe_time": (
+                            train["神戸発"]
+                        ),
                         "points": points,
+                        "stops": stops,
                     })
 
-                # SVG本体のおおよそのサイズ
+                diagram_trains = stack_overlapping_stops(diagram_trains)
+
+
+                # -----------------------------------------
+                # SVGの横幅
+                # -----------------------------------------
                 diagram_width = (
-                        (diagram_end_minutes - diagram_start_minutes)
-                        * diagram_pixels_per_minute
-                )
-
-                diagram_height = (
-                        diagram_top_margin * 2
-                        + (len(OUTBOUND_STATIONS) - 1)
-                        * diagram_station_spacing
-                )
-
-                start_minutes, end_minutes = calculate_timeline_range(
-                    selected_trains
-                )
-
-                target_top = calculate_top(
-                    time_text=target_time,
-                    start_minutes=start_minutes,
-                    pixels_per_minute=pixels_per_minute,
-                )
-
-                timeline_height = (
-                    (end_minutes - start_minutes)
-                    * pixels_per_minute
-                ) + (diagram_offset * 2)
-
-                time_ticks = generate_time_ticks(
-                    start_minutes,
-                    end_minutes
-                )
-
-                for train in selected_trains:
-                    lane = build_train_lane(
-                        train=train,
-                        stations=OUTBOUND_STATIONS,
-                        start_minutes=start_minutes,
-                        pixels_per_minute=pixels_per_minute,
+                    (
+                        diagram_end_minutes
+                        - diagram_start_minutes
                     )
+                    * diagram_pixels_per_minute
+                )
 
-                    first_top = lane[0]["top"] if lane else 0
-                    last_top = lane[-1]["top"] if lane else 0
 
-                    train_lanes.append({
-                        "train_type": train["train_type"],
-                        "stops": lane,
-                        "line_top": first_top,
-                        "line_height": last_top - first_top,
-                    })
+                # -----------------------------------------
+                # SVGの高さ
+                # -----------------------------------------
+                diagram_height = (
+                    diagram_top_margin * 2
+                    + (
+                        len(OUTBOUND_STATIONS) - 1
+                    )
+                    * diagram_station_spacing
+                )
 
-        # -------------------------
+
+        # =================================================
         # 帰り
-        # -------------------------
+        # =================================================
         elif direction == "return":
-            trains = load_trains("to-ibaraki.csv")
 
-            # 検索可能時間か確認
+            trains = load_trains(
+                "to-ibaraki.csv"
+            )
+
+
+            # ---------------------------------------------
+            # 15:00～終電の範囲チェック
+            # ---------------------------------------------
             if not is_valid_search_time(
                 direction="return",
                 target_time=target_time,
                 trains=trains,
             ):
+
                 error_message = (
                     "帰りの希望出発時刻は、"
                     "15:00から終電までを指定してください。"
                 )
 
+
             else:
-                selected_trains = select_return_trains(
-                    trains,
-                    target_time
+
+                # 指定時刻以降の10本
+                selected_trains = (
+                    select_return_trains(
+                        trains,
+                        target_time
+                    )
                 )
 
+
+        # =================================================
+        # directionに想定外の値が来た場合
+        # =================================================
+        else:
+
+            direction = "outbound"
+
+            error_message = (
+                "行き・帰りを選択してください。"
+            )
+
+
+    # =====================================================
+    # HTMLへ渡す
+    # =====================================================
     return render_template(
         "index.html",
-        selected_trains=selected_trains,
-        train_lanes=train_lanes,
-        time_ticks=time_ticks,
+
         direction=direction,
         target_time=target_time,
-        start_minutes=start_minutes,
-        end_minutes=end_minutes,
-        pixels_per_minute=pixels_per_minute,
-        target_top=target_top,
-        timeline_height=timeline_height,
-        diagram_offset=diagram_offset,
+
+        selected_trains=selected_trains,
         error_message=error_message,
+
+        time_ticks=time_ticks,
+
         diagram_trains=diagram_trains,
-        diagram_pixels_per_minute=diagram_pixels_per_minute,
-        diagram_top_margin=diagram_top_margin,
-        diagram_station_spacing=diagram_station_spacing,
+
+        diagram_start_minutes=(
+            diagram_start_minutes
+        ),
+
+        diagram_end_minutes=(
+            diagram_end_minutes
+        ),
+
+        diagram_pixels_per_minute=(
+            diagram_pixels_per_minute
+        ),
+
+        diagram_top_margin=(
+            diagram_top_margin
+        ),
+
+        diagram_station_spacing=(
+            diagram_station_spacing
+        ),
+
         diagram_width=diagram_width,
         diagram_height=diagram_height,
-        diagram_start_minutes=diagram_start_minutes,
-        diagram_end_minutes=diagram_end_minutes,
-        outbound_stations=OUTBOUND_STATIONS,
+
+        diagram_target_x=(
+            diagram_target_x
+        ),
+
+        outbound_stations=(
+            OUTBOUND_STATIONS
+        ),
     )
 
 

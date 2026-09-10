@@ -272,6 +272,75 @@ def build_train_diagram_points(
 
     return points
 
+def build_train_diagram_stops(
+    train,
+    stations,
+    start_minutes,
+    pixels_per_minute,
+    top_margin,
+    station_spacing,
+):
+    stops = []
+
+    for index, station in enumerate(stations):
+        y = top_margin + (index * station_spacing)
+
+        arrival = ""
+        departure = ""
+
+        arrival_key = station["arrival_key"]
+        departure_key = station["departure_key"]
+
+        if arrival_key:
+            arrival = train.get(arrival_key, "") or ""
+
+        if departure_key:
+            departure = train.get(departure_key, "") or ""
+
+        # 到着・発車の両方が空欄なら、
+        # この列車はその駅に停車しないので箱を作らない
+        if not arrival and not departure:
+            continue
+
+        arrival_x = None
+        departure_x = None
+
+        if arrival:
+            arrival_x = calculate_x_position(
+                time_text=arrival,
+                start_minutes=start_minutes,
+                pixels_per_minute=pixels_per_minute,
+            )
+
+        if departure:
+            departure_x = calculate_x_position(
+                time_text=departure,
+                start_minutes=start_minutes,
+                pixels_per_minute=pixels_per_minute,
+            )
+
+        # 箱の中心位置
+        if arrival_x is not None and departure_x is not None:
+            x = (arrival_x + departure_x) / 2
+
+        elif arrival_x is not None:
+            x = arrival_x
+
+        else:
+            x = departure_x
+
+        stops.append({
+            "station": station["name"],
+            "arrival": arrival,
+            "departure": departure,
+            "arrival_x": arrival_x,
+            "departure_x": departure_x,
+            "x": x,
+            "y": y,
+        })
+
+    return stops
+
 def calculate_timeline_range(trains):
     all_times = []
 
@@ -364,3 +433,58 @@ def build_train_lane(
         })
 
     return lane
+
+def stack_overlapping_stops(diagram_trains, stack_step=34):
+    """
+    同じ駅・同じ時刻の stop が重なる場合、
+    縦方向に少しずらして表示するための offset_y を付ける。
+
+    判定ルール：
+    - arrival があれば arrival を優先
+    - arrival が無ければ departure を使う
+    """
+
+    # まず全stopに offset_y = 0 を入れておく
+    for train in diagram_trains:
+        for stop in train["stops"]:
+            stop["offset_y"] = 0
+
+    grouped = {}
+
+    # 同じ駅・同じ時刻でグループ化
+    for train_index, train in enumerate(diagram_trains):
+        for stop_index, stop in enumerate(train["stops"]):
+            compare_time = stop.get("arrival") or stop.get("departure")
+
+            if not compare_time:
+                continue
+
+            key = (stop["station"], compare_time)
+
+            grouped.setdefault(key, []).append({
+                "train_index": train_index,
+                "stop_index": stop_index,
+                "stop": stop,
+            })
+
+    # 重なるグループだけ縦に並べる
+    for items in grouped.values():
+        if len(items) <= 1:
+            continue
+
+        # 左から右の順に並べる
+        items.sort(key=lambda item: item["train_index"])
+
+        count = len(items)
+
+        # 例:
+        # 2個 -> [-17, 17]
+        # 3個 -> [-34, 0, 34]
+        # 4個 -> [-51, -17, 17, 51]
+        start = -((count - 1) / 2) * stack_step
+
+        for i, item in enumerate(items):
+            offset_y = int(start + i * stack_step)
+            item["stop"]["offset_y"] = offset_y
+
+    return diagram_trains

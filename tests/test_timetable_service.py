@@ -13,6 +13,7 @@ from timetable_service import (
     is_valid_search_time,
     calculate_x_position,
     build_train_diagram_points,
+    build_train_diagram_stops,
 )
 
 class TimeToMinutesTest(unittest.TestCase):
@@ -601,6 +602,76 @@ class BuildTrainDiagramPointsTest(unittest.TestCase):
                     "station": "神戸",
                     "event": "departure",
                     "time": "8:30",
+                    "x": 300,
+                    "y": 240,
+                },
+            ],
+            result
+        )
+
+class BuildTrainDiagramStopsTest(unittest.TestCase):
+
+    def test_駅ごとに到着時刻と発車時刻を1つのデータにまとめられる(self):
+        train = {
+            "茨木発": "8:00",
+            "大阪着": "8:10",
+            "大阪発": "8:12",
+            "神戸発": "8:30",
+        }
+
+        stations = [
+            {
+                "name": "茨木",
+                "arrival_key": None,
+                "departure_key": "茨木発",
+            },
+            {
+                "name": "大阪",
+                "arrival_key": "大阪着",
+                "departure_key": "大阪発",
+            },
+            {
+                "name": "神戸",
+                "arrival_key": None,
+                "departure_key": "神戸発",
+            },
+        ]
+
+        result = build_train_diagram_stops(
+            train=train,
+            stations=stations,
+            start_minutes=480,
+            pixels_per_minute=10,
+            top_margin=40,
+            station_spacing=100,
+        )
+
+        self.assertEqual(
+            [
+                {
+                    "station": "茨木",
+                    "arrival": "",
+                    "departure": "8:00",
+                    "arrival_x": None,
+                    "departure_x": 0,
+                    "x": 0,
+                    "y": 40,
+                },
+                {
+                    "station": "大阪",
+                    "arrival": "8:10",
+                    "departure": "8:12",
+                    "arrival_x": 100,
+                    "departure_x": 120,
+                    "x": 110,
+                    "y": 140,
+                },
+                {
+                    "station": "神戸",
+                    "arrival": "",
+                    "departure": "8:30",
+                    "arrival_x": None,
+                    "departure_x": 300,
                     "x": 300,
                     "y": 240,
                 },
